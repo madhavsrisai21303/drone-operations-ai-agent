@@ -54,3 +54,15 @@ def find_best_drone(drones, mission):
         # Cannot be in maintenance
         if check_maintenance(drone):
             continue
+
+        # Check weather compatibility
+        if check_weather(drone, mission):
+            continue
+
+        candidates.append(drone)
+
+    if not candidates:
+        return None
+
+    # For simplicity, return the first candidate (could add scoring)
+    return candidates[0]
