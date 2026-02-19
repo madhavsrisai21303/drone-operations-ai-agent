@@ -9,62 +9,67 @@ from utils import update_pilots, update_missions
 
 def handle_message(message, pilots, drones, missions):
     message = message.lower()
+    response = "I'm sorry, I didn't understand that. Try commands like 'assign mission 123', 'show available pilots', 'show maintenance drones', or 'update pilot John to Available'."
 
     # ASSIGN MISSION
     if "assign" in message and "mission" in message:
         words = message.split()
         mission_id = None
-
         for word in words:
-            if word.upper().startswith("M"):
-                mission_id = word.upper()
-
+            if word.isdigit():
+                mission_id = int(word)
+                break
         if mission_id:
-            return assign_mission(mission_id, pilots, drones, missions)
+            response = assign_mission(mission_id, pilots, drones, missions)
         else:
-            return "Please specify mission ID (e.g., M1).", pilots, drones, missions
+            response = "Please specify a valid mission ID (e.g., 'assign mission 123')."
 
     # SHOW AVAILABLE PILOTS
-    if "available pilots" in message:
-        available = pilots[pilots["status"] == "Available"]
-        if available.empty:
-            return "No available pilots found.", pilots, drones, missions
-        return available.to_string(index=False), pilots, drones, missions
+    elif "available pilots" in message:
+        available_pilots = pilots[pilots["status"] == "Available"]
+        if not available_pilots.empty:
+            response = "Available Pilots:\n" + "\n".join(
+                [f"- {row['name']} (Skills: {row['skills']}, Location: {row['location']})" for _, row in available_pilots.iterrows()])
+        else:
+            response = "No available pilots at the moment."
 
     # SHOW MAINTENANCE DRONES
-    if "maintenance" in message:
-        maint = drones[drones["status"] == "Maintenance"]
-        if maint.empty:
-            return "No drones currently in maintenance.", pilots, drones, missions
-        return maint.to_string(index=False), pilots, drones, missions
+    elif "maintenance" in message:
+        maintenance_drones = drones[drones["status"] == "Maintenance"]
+        if not maintenance_drones.empty:
+            response = "Drones in Maintenance:\n" + "\n".join(
+                [f"- {row['drone_id']} (Location: {row['location']})" for _, row in maintenance_drones.iterrows()])
+        else:
+            response = "No drones in maintenance."
 
     # UPDATE PILOT STATUS
-    if "update" in message and "to" in message:
+    elif "update" in message and "to" in message:
         words = message.split()
+        pilot_name = None
+        new_status = None
         try:
-            name = words[1].capitalize()
-            status = words[-1].capitalize()
+            pilot_name = words[words.index("pilot") + 1]
+            new_status = words[words.index("to") + 1]
+        except (ValueError, IndexError):
+            pass
+        if pilot_name and new_status:
+            if pilot_name in pilots["name"].values:
+                pilots.loc[pilots["name"] == pilot_name, "status"] = new_status.capitalize()
+                update_pilots(pilots)
+                response = f"Pilot {pilot_name} status updated to {new_status.capitalize()}."
+            else:
+                response = f"Pilot {pilot_name} not found."
+        else:
+            response = "Please specify pilot name and status (e.g., 'update pilot John to Available')."
 
-            if name not in pilots["name"].values:
-                return f"Pilot {name} not found.", pilots, drones, missions
-
-            pilots.loc[pilots["name"] == name, "status"] = status
-            update_pilots(pilots)
-
-            return f"Updated {name} to {status}.", pilots, drones, missions
-
-        except:
-            return "Invalid update format. Example: Update Alice to On Leave", pilots, drones, missions
-
-    return "Command not recognized.", pilots, drones, missions
+    return response, pilots, drones, missions
 
 
 def assign_mission(mission_id, pilots, drones, missions):
-
     mission_rows = missions[missions["project_id"] == mission_id]
 
     if mission_rows.empty:
-        return "Mission not found.", pilots, drones, missions
+        return f"Mission {mission_id} not found."
 
     mission = mission_rows.iloc[0]
 
@@ -72,24 +77,24 @@ def assign_mission(mission_id, pilots, drones, missions):
     drone = find_best_drone(drones, mission)
 
     if pilot is None:
-        return "No suitable pilot found.", pilots, drones, missions
+        return "No suitable pilot available for this mission."
 
     if drone is None:
-        return "No suitable drone found.", pilots, drones, missions
+        return "No suitable drone available for this mission."
 
     # Conflict checks
     if check_pilot_conflict(pilot, mission, missions):
-        return "Pilot has scheduling conflict.", pilots, drones, missions
+        return f"Pilot {pilot['name']} has a scheduling conflict."
 
     budget_warning, cost = check_budget(pilot, mission)
 
     warnings = []
 
     if budget_warning:
-        warnings.append("⚠ Budget exceeded.")
+        warnings.append(f"Budget exceeded: Estimated cost ${cost}, Budget ${mission['budget']}")
 
     if location_mismatch(pilot, drone, mission):
-        warnings.append("⚠ Location mismatch detected.")
+        warnings.append("Location mismatch between pilot, drone, and mission.")
 
     # Update mission
     missions.loc[missions["project_id"] == mission_id, "assigned_pilot"] = pilot["name"]
@@ -107,10 +112,10 @@ def assign_mission(mission_id, pilots, drones, missions):
 
     Pilot: {pilot['name']}
     Drone: {drone['drone_id']}
-    Estimated Cost: {cost}
+    Estimated Cost: ${cost}
     """
 
     if warnings:
-        response += "\n\nWarnings:\n" + "\n".join(warnings)
+        response += "\nWarnings:\n" + "\n".join(warnings)
 
-    return response, pilots, drones, missions
+    return response

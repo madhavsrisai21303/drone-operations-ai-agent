@@ -1,8 +1,8 @@
 import os
 import json
+from google.oauth2.service_account import Credentials
 import gspread
 import pandas as pd
-from google.oauth2.service_account import Credentials
 
 # Google API scope
 SCOPE = [
@@ -13,30 +13,24 @@ SCOPE = [
 # Your Google Sheet name
 SPREADSHEET_NAME = "Skylark_Drone_Operations"
 
-
 def get_credentials():
     """
     Dual-mode credentials loader:
     - If GOOGLE_CREDENTIALS environment variable exists → use it (Render)
     - Else → use local credentials.json file
     """
-
-    # If running on Render (environment variable exists)
     if "GOOGLE_CREDENTIALS" in os.environ:
-        creds_dict = json.loads(os.environ["GOOGLE_CREDENTIALS"])
-        return Credentials.from_service_account_info(creds_dict, scopes=SCOPE)
-
-    # Else use local file
+        creds_info = json.loads(os.environ["GOOGLE_CREDENTIALS"])
+        creds = Credentials.from_service_account_info(creds_info, scopes=SCOPE)
     else:
-        return Credentials.from_service_account_file("credentials.json", scopes=SCOPE)
-
+        creds = Credentials.from_service_account_file('credentials.json', scopes=SCOPE)
+    return creds
 
 def connect_sheet():
     creds = get_credentials()
     client = gspread.authorize(creds)
     sheet = client.open(SPREADSHEET_NAME)
     return sheet
-
 
 def load_data():
     sheet = connect_sheet()
@@ -51,18 +45,14 @@ def load_data():
 
     return pilots, drones, missions
 
-
 def update_pilots(pilots_df):
     sheet = connect_sheet()
     ws = sheet.worksheet("Pilot_Roster")
-
     ws.clear()
     ws.update([pilots_df.columns.values.tolist()] + pilots_df.values.tolist())
-
 
 def update_missions(missions_df):
     sheet = connect_sheet()
     ws = sheet.worksheet("Missions")
-
     ws.clear()
     ws.update([missions_df.columns.values.tolist()] + missions_df.values.tolist())
