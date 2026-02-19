@@ -1,5 +1,6 @@
-streamlit
+flask
 pandas
 gspread
 google-auth
 python-dateutil
+gunicorn
